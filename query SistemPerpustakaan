@@ -1,0 +1,162 @@
+CREATE TABLE Penulis (
+    penulis_id INT PRIMARY KEY,
+    nama VARCHAR(100),
+    tanggal_lahir DATE,
+    kebangsaan VARCHAR(50)
+);
+
+CREATE TABLE Buku (
+    buku_id INT PRIMARY KEY,
+    judul VARCHAR(100),
+    penulis_id INT,
+    genre VARCHAR(50),
+    tanggal_terbit DATE,
+    FOREIGN KEY (penulis_id) REFERENCES Penulis(penulis_id)
+);
+
+CREATE TABLE Anggota (
+    anggota_id INT PRIMARY KEY,
+    nama VARCHAR(100),
+    tanggal_bergabung DATE,
+    jenis_anggota VARCHAR(50)
+);
+
+CREATE TABLE Peminjaman (
+    peminjaman_id INT PRIMARY KEY,
+    buku_id INT,
+    anggota_id INT,
+    tanggal_peminjaman DATE,
+    tanggal_kembali DATE,
+    FOREIGN KEY (buku_id) REFERENCES Buku(buku_id),
+    FOREIGN KEY (anggota_id) REFERENCES Anggota(anggota_id)
+);
+
+CREATE TABLE Genre (
+    genre_id INT PRIMARY KEY,
+    nama_genre VARCHAR(50),
+    deskripsi TEXT
+);
+
+INSERT INTO Penulis (penulis_id, nama, tanggal_lahir, kebangsaan) VALUES 
+(1, 'Penulis A', '1970-01-01', 'USA'),
+(2, 'Penulis B', '1980-02-02', 'UK'),
+(3, 'Penulis C', '1990-03-03', 'Canada');
+
+INSERT INTO Buku (buku_id, judul, penulis_id, genre, tanggal_terbit) VALUES 
+(1, 'Buku Satu', 1, 'Fiksi', '2001-01-01'),
+(2, 'Buku Dua', 2, 'Non-Fiksi', '2002-02-02');
+
+INSERT INTO Anggota (anggota_id, nama, tanggal_bergabung, jenis_anggota) VALUES 
+(1, 'Anggota Satu', '2020-01-01', 'Reguler'),
+(2, 'Anggota Dua', '2020-02-01', 'Premium');
+
+INSERT INTO Peminjaman (peminjaman_id, buku_id, anggota_id, tanggal_peminjaman, tanggal_kembali) VALUES 
+(1, 1, 1, '2021-01-01', '2021-02-01'),
+(2, 2, 2, '2021-02-01', '2021-03-01');
+
+INSERT INTO Genre (genre_id, nama_genre, deskripsi) VALUES 
+(1, 'Fiksi', 'Karya fiksi'),
+(2, 'Non-Fiksi', 'Teks informatif');
+
+DELIMITER $$
+
+CREATE FUNCTION JumlahBuku() RETURNS INT
+BEGIN
+    DECLARE total_buku INT;
+    
+    SELECT COUNT(*) INTO total_buku FROM Buku;
+    RETURN total_buku;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE FUNCTION BukuDariPenulis(penulis_id INT, nama_genre VARCHAR(50)) RETURNS VARCHAR(255)
+BEGIN
+    DECLARE judul_buku VARCHAR(255);
+    
+    SELECT judul INTO judul_buku 
+    FROM Buku 
+    WHERE penulis_id = penulis_id AND genre = nama_genre;
+    
+    RETURN judul_buku;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE TampilkanSemuaAnggota()
+BEGIN
+    SELECT * FROM Anggota;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE TambahAnggota(nama VARCHAR(100), jenis_anggota VARCHAR(50))
+BEGIN
+    INSERT INTO Anggota (nama, tanggal_bergabung, jenis_anggota)
+    VALUES (nama, CURDATE(), jenis_anggota);
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER SebelumInsertPeminjaman
+BEFORE INSERT ON Peminjaman
+FOR EACH ROW
+BEGIN
+    -- Logika untuk mengecek apakah buku sudah dipinjam
+    DECLARE jumlah_peminjaman INT;
+    SELECT COUNT(*) INTO jumlah_peminjaman 
+    FROM Peminjaman 
+    WHERE buku_id = NEW.buku_id AND tanggal_kembali IS NULL;
+
+    IF jumlah_peminjaman > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Buku sudah dipinjam!';
+    END IF;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER SetelahInsertPeminjaman
+AFTER INSERT ON Peminjaman
+FOR EACH ROW
+BEGIN
+    INSERT INTO LogPeminjaman (peminjaman_id, aksi, tanggal_aksi) 
+    VALUES (NEW.peminjaman_id, 'INSERT', NOW());
+END $$
+
+DELIMITER ;
+
+CREATE INDEX idx_nama_penulis ON Penulis(nama);
+ALTER TABLE Buku ADD CONSTRAINT buku_genre_penulis UNIQUE (genre, penulis_id);
+
+CREATE VIEW BukuPenulis AS 
+SELECT p.nama AS nama_penulis, b.judul 
+FROM Penulis p JOIN Buku b ON p.penulis_id = b.penulis_id;
+
+CREATE VIEW PeminjamanAnggota AS 
+SELECT a.nama AS nama_anggota, p.tanggal_peminjaman 
+FROM Anggota a JOIN Peminjaman p ON a.anggota_id = p.anggota_id;
+
+-- Membuat pengguna
+CREATE USER 'user1'@'localhost' IDENTIFIED BY 'password1';
+CREATE USER 'user2'@'localhost' IDENTIFIED BY 'password2';
+CREATE USER 'user3'@'localhost' IDENTIFIED BY 'password3';
+
+-- Membuat role (pastikan MySQL versi mendukung role)
+CREATE ROLE 'keuangan';
+CREATE ROLE 'pengembangan_sd';
+CREATE ROLE 'gudang';
+
+-- Memberikan hak akses
+GRANT SELECT ON Buku TO 'user1';
+GRANT SELECT ON BukuPenulis TO 'user2';
+GRANT EXECUTE ON PROCEDURE TambahAnggota TO 'keuangan';
